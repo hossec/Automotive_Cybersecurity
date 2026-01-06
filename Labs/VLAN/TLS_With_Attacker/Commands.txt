@@ -1,0 +1,226 @@
+## 📊 Network Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│            Linux Network Namespaces             │
+├──────────────┬──────────────┬──────────────────┤
+│   ecuA       │   ecuC       │   ecuD           │
+│  (Tester)    │   (ECU)      │  (Attacker)      │
+│  10.0.0.20   │  10.0.0.10   │  10.0.0.30       │
+│              │              │                  │
+│  Client      │  Server      │  MITM Proxy      │
+│  DoIP/UDS    │  DoIP/UDS    │  ARP Poisoning   │
+│  TLS 1.2     │  TLS 1.1-1.2 │  Packet Modify   │
+└──────┬───────┴──────┬───────┴────────┬─────────┘
+       │              │                │
+       └──────────────┴────────────────┘
+              br-doip (Bridge)
+              10.0.0.0/24
+```
+
+
+## 🛠️ Installation & Setup
+
+### Step 1: Create Project Folder
+#### Download and place all project files in Project Folder:
+
+### Step 2: Open Terminal and Install pyenv (Python Version Manager)
+
+```bash
+curl https://pyenv.run | bash
+```
+
+### Step 3: Configure Shell
+
+**For Zsh:**
+```bash
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.zshrc
+echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.zshrc
+echo 'eval "$(pyenv init -)"' >> ~/.zshrc
+source ~/.zshrc
+```
+**For Fish Shell:**
+```bash
+echo 'set -gx PYENV_ROOT $HOME/.pyenv' >> ~/.config/fish/config.fish
+echo 'set -gx PATH $PYENV_ROOT/bin $PATH' >> ~/.config/fish/config.fish
+echo 'status is-interactive; and pyenv init --path | source' >> ~/.config/fish/config.fish
+echo 'pyenv init - | source' >> ~/.config/fish/config.fish
+source ~/.config/fish/config.fish
+```
+**For Bash:**
+```bash
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+echo 'export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(pyenv init -)"' >> ~/.bashrc
+source ~/.bashrc
+```
+### Step 4: Install Python 3.12
+
+```bash
+# Install Python 3.12.7
+pyenv install 3.12.7
+
+# Navigate to project folder
+cd PROJECT_FILE
+
+# Set Python 3.12 for this project
+pyenv local 3.12.7
+
+# Verify installation (should output: Python 3.12.7)
+python --version
+```
+
+### Step 5: Install Python Dependencies
+
+```bash
+pip install scapy netifaces
+```
+
+
+### Step 6: Setup Network Lab
+
+```bash
+# Make setup script executable
+chmod +x setup_doip_lab.sh
+
+# Run network setup (creates namespaces and bridge)
+sudo ./setup_doip_lab.sh
+```
+
+**Expected Output:**
+```
+[+] DoIP bridge lab ready
+[+] Nodes:
+    ecuA (Tester)   -> 10.0.0.20
+    ecuC (ECU)      -> 10.0.0.10
+    ecuD (Attacker) -> 10.0.0.30
+```
+
+---
+
+## 🚀 Running the Lab
+
+You'll need **3 terminal windows** open simultaneously.
+
+### Terminal 1: ECU Server (Target)
+
+```bash
+# Navigate to project folder
+cd PROJECT_FOLDER
+
+# Enter ECU namespace
+sudo ip netns exec ecuC bash
+
+# Run server (⚠️ IMPORTANT: Replace 'user' with YOUR username)
+/home/user/.pyenv/shims/python3.12 ecu_c_doip_server.py
+```
+
+**Expected Output:**
+```
+[ECU] ⚠️  VULNERABLE DoIP ECU
+[ECU] ⚠️  Accepts TLS 1.1-1.2, PREFERS 1.2 (NO downgrade protection!)
+[ECU] 📡 UDP discovery service on port 13400
+[ECU] ⚠️  VULNERABLE DoIP Server on port 13401
+```
+
+### Terminal 2: Attacker (MITM)
+
+```bash
+# Navigate to project folder
+cd PROJECT_FOLDER
+
+# Enter Attacker namespace
+sudo ip netns exec ecuD bash
+
+# Run attacker (⚠️ IMPORTANT: Replace 'user' with YOUR username)
+/home/user/.pyenv/shims/python3.12 attacker.py
+```
+
+**Menu will appear:**
+```
+Options:
+  1 - Start Active MITM Attack
+  2 - Stop Attack
+  3 - Exit
+
+Select option: 1
+```
+
+Press **`1`** then **`ENTER`** to start the attack.
+
+**Expected Output:**
+```
+[INFO] Setting up iptables redirect rules...
+[ATTACK] 🎭 Starting ARP poisoning...
+[SUCCESS] ✅ ARP poisoning active
+[SUCCESS] ✅ TCP proxy active
+🎯 Attack is LIVE!
+```
+
+### Terminal 3: Client/Tester
+
+```bash
+# Navigate to project folder
+cd PROJECT_FOLDER
+
+# Enter Tester namespace
+sudo ip netns exec ecuA bash
+
+# Run client (⚠️ IMPORTANT: Replace 'user' with YOUR username)
+/home/user/.pyenv/shims/python3.12 ecu_a_doip_client.py
+```
+
+**Expected Output (Attack Successful):**
+```
+[INFO] 📡 Step 1: UDP Vehicle Discovery (unencrypted)
+[ OK ] ECU Found: 10.0.0.10
+
+[INFO] 🔒 Step 2: TLS 1.2 Handshake on port 13401
+[WARN] ⚠️  TLS 1.2 handshake failed (possible downgrade attack)
+[INFO] 🔄 Retrying with TLS 1.1 (downgraded)...
+
+[INFO] 🔻 Step 2: TLS 1.1 Handshake on port 13401 (downgraded)
+[ OK ] ✅ TLS Handshake Complete!
+[ OK ] 🔐 Protocol: TLSv1.1
+[WARN] ⚠️  Using downgraded TLS 1.1!
+[SUCCESS] ✅ Connected with downgraded TLS 1.1!
+[WARN] ⚠️  This connection is vulnerable! Downgrade attack succeeded!
+```
+
+---
+
+## 🔬 Understanding the Attack
+
+### What Happens Without Attack
+
+```
+Client --[TLS 1.2 Hello]--> Server
+Server --[TLS 1.2 Accept]--> Client
+✅ Secure TLS 1.2 connection established
+```
+
+### What Happens With Attack
+
+```
+1. Client --[TLS 1.2 Hello]--> Attacker (ARP poisoned)
+2. Attacker modifies packet: TLS 1.2 → TLS 1.1
+3. Attacker --[TLS 1.1 Hello]--> Server
+4. Server rejects (protocol mismatch)
+5. Attacker disconnects MITM
+6. Client retries directly --[TLS 1.1 Hello]--> Server
+7. Server accepts TLS 1.1 ⚠️ VULNERABLE!
+```
+
+### Attack Output in Terminal 2 (Attacker)
+
+```
+[SUCCESS] ✅ Connected to real server 10.0.0.10:13401
+[INFO] 📥 Client→Server: Intercepted TLS Client Hello (TLS 1.2)
+[ATTACK] 🔻 DOWNGRADED: TLS 1.2 → TLS 1.1 (packet #1)
+[ATTACK] 🔌 Downgrade sent! Disconnecting MITM...
+[ATTACK] 🔒 Stopping ARP poisoning...
+[INFO] Restoring ARP tables...
+[SUCCESS] ✅ MITM disconnected!
+[SUCCESS] ✅ Client will now reconnect directly to server
+[SUCCESS] ✅ Server may accept downgraded TLS 1.0 on next attempt
+```

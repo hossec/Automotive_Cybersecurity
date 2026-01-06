@@ -1,0 +1,26 @@
+RUN Network.sh:
+sudo ./Network.sh
+
+++++++++++TERMINAL 1++++++++++++
+sudo ip netns exc ecuC bash
+Run this command inside the ecuC names space:
+source venv/bin/activate
+python3 Main.py
+
+++++++++++TERMINAL 2++++++++++++
+sudo ip netns exc ecuA bash
+Run this command inside the ecuA namespace
+source venv/bin/activate
+python3 Tester.py
+
+++++++++++TERMINAL 3++++++++++++
+sudo ip netns exc ecuB bash
+Run this command inside the ecuB namespace
+source venv/bin/activate
+pythone3 Ecu.py
+
+++++++++++TERMINAL 4++++++++++++
+sudo ip netns exc ecuD bash
+Run this command inside the ecuD namespace
+source venv/bin/activate
+pythone3 attacker.py
